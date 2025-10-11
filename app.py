@@ -1,13 +1,55 @@
-Install
-It is recommended to install this module by using pip:
-
-pip install youtube-transcript-api
-You can either integrate this module into an existing application or just use it via a CLI.
-
-API
-The easiest way to get a transcript for a given video is to execute:
-
+from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
+import os
 
-ytt_api = YouTubeTranscriptApi()
-ytt_api.fetch(video_id)
+app = Flask(__name__)
+
+@app.route('/', methods=['POST'])
+def get_transcript():
+    try:
+        data = request.get_json()
+        url_or_id = data.get('urlOrId', '')
+        video_id = data.get('videoId', '')
+        languages = data.get('languages', ['en'])
+        
+        # Extract video ID if needed
+        if not video_id and url_or_id:
+            if 'youtu.be/' in url_or_id:
+                video_id = url_or_id.split('youtu.be/')[-1].split('?')[0]
+            elif 'youtube.com/watch' in url_or_id:
+                video_id = url_or_id.split('v=')[-1].split('&')[0]
+            elif 'youtube.com/shorts/' in url_or_id:
+                video_id = url_or_id.split('/shorts/')[-1].split('?')[0]
+        
+        if not video_id:
+            return jsonify({'success': False, 'error': 'No video ID found'})
+        
+        # Use the same API as your local environment
+        ytt_api = YouTubeTranscriptApi()
+        
+        # Try to fetch transcript with the specified languages
+        try:
+            fetched_transcript = ytt_api.fetch(video_id, languages=languages)
+            
+            # Convert to our format
+            captions = []
+            for snippet in fetched_transcript:
+                captions.append({
+                    'text': snippet.text,
+                    'offset': int(snippet.start * 1000),  # Convert to milliseconds
+                    'duration': int(snippet.duration * 1000)
+                })
+            
+            return jsonify({'success': True, 'captions': captions})
+            
+        except Exception as e:
+            error_msg = str(e)
+            if 'disabled' in error_msg.lower() or 'not available' in error_msg.lower():
+                return jsonify({'success': False, 'error': f'Transcript disabled: {error_msg}'})
+            return jsonify({'success': False, 'error': error_msg})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
