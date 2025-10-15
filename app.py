@@ -15,6 +15,21 @@ def get_proxy_config():
         return {'http': http_proxy or https_proxy, 'https': https_proxy or http_proxy}
     return None
 
+# Ensure proxy env vars are exported at startup so requests picks them up
+def set_proxy_env_from_config():
+    cfg = get_proxy_config()
+    if not cfg:
+        return
+    if cfg.get('http'):
+        os.environ['HTTP_PROXY'] = cfg['http']
+        os.environ['http_proxy'] = cfg['http']
+    if cfg.get('https'):
+        os.environ['HTTPS_PROXY'] = cfg['https']
+        os.environ['https_proxy'] = cfg['https']
+
+# Apply at import time
+set_proxy_env_from_config()
+
 @app.route('/health', methods=['GET'])
 def health_check():
     proxy_config = get_proxy_config()
