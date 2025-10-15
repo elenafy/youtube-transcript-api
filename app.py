@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
 import os
+import certifi
 
 app = Flask(__name__)
 
@@ -26,6 +27,10 @@ def set_proxy_env_from_config():
     if cfg.get('https'):
         os.environ['HTTPS_PROXY'] = cfg['https']
         os.environ['https_proxy'] = cfg['https']
+    # Ensure requests uses a valid CA bundle in serverless/container
+    ca_path = certifi.where()
+    os.environ['REQUESTS_CA_BUNDLE'] = ca_path
+    os.environ['SSL_CERT_FILE'] = ca_path
 
 # Apply at import time
 set_proxy_env_from_config()
