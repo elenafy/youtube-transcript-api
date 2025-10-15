@@ -8,6 +8,17 @@ app = Flask(__name__)
 def health_check():
     return jsonify({'status': 'healthy', 'service': 'youtube-transcript-api'})
 
+@app.route('/', methods=['GET'])
+def root():
+    return jsonify({
+        'service': 'youtube-transcript-api',
+        'status': 'running',
+        'endpoints': {
+            'health': 'GET /health',
+            'transcript': 'POST /'
+        }
+    })
+
 @app.route('/', methods=['POST'])
 def get_transcript():
     try:
