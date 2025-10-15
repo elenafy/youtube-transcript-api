@@ -4,9 +4,36 @@ import os
 
 app = Flask(__name__)
 
+# Proxy configuration helper
+def get_proxy_config():
+    proxy_url = os.environ.get('PROXY_URL')
+    http_proxy = os.environ.get('HTTP_PROXY') or os.environ.get('http_proxy')
+    https_proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
+    if proxy_url:
+        return {'http': proxy_url, 'https': proxy_url}
+    if http_proxy or https_proxy:
+        return {'http': http_proxy or https_proxy, 'https': https_proxy or http_proxy}
+    return None
+
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'healthy', 'service': 'youtube-transcript-api'})
+    proxy_config = get_proxy_config()
+    # Effective proxies used by requests
+    effective_http = os.environ.get('HTTP_PROXY') or os.environ.get('http_proxy')
+    effective_https = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
+
+    def mask(url):
+        if not url:
+            return None
+        return f"***:***@{url.split('@')[-1]}" if '@' in url else url
+
+    return jsonify({
+        'status': 'healthy',
+        'service': 'youtube-transcript-api',
+        'proxy_configured': proxy_config is not None,
+        'effective_http_proxy': mask(effective_http),
+        'effective_https_proxy': mask(effective_https)
+    })
 
 @app.route('/', methods=['GET'])
 def root():
@@ -41,7 +68,17 @@ def get_transcript():
         if not video_id:
             return jsonify({'success': False, 'error': 'No video ID found'})
         
-        # Use the same API as your local environment
+        # Set proxy env so requests (used by youtube-transcript-api) picks it up
+        proxy_config = get_proxy_config()
+        if proxy_config:
+            if proxy_config.get('http'):
+                os.environ['HTTP_PROXY'] = proxy_config['http']
+                os.environ['http_proxy'] = proxy_config['http']
+            if proxy_config.get('https'):
+                os.environ['HTTPS_PROXY'] = proxy_config['https']
+                os.environ['https_proxy'] = proxy_config['https']
+
+        # Create API instance
         ytt_api = YouTubeTranscriptApi()
         
         # Try to fetch transcript with the specified languages
@@ -103,6 +140,17 @@ def get_transcript():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    print(f"🚀 Starting Flask app on port {port}")
-    print(f"🔧 Environment: {os.environ.get('RENDER', 'local')}")
+    proxy_config = get_proxy_config()
+    print('=' * 80)
+    print('🚀 Starting Flask YouTube Transcript API')
+    print('=' * 80)
+    print(f"Port: {port}")
+    print(f"Environment: {os.environ.get('RENDER', 'local')}")
+    print(f"Proxy configured: {'✅ Yes' if proxy_config else '❌ No (requests may be blocked)'}")
+    if proxy_config:
+        disp = proxy_config.get('https') or proxy_config.get('http')
+        if disp and '@' in disp:
+            disp = f"***:***@{disp.split('@')[-1]}"
+        print(f"Proxy URL: {disp}")
+    print('=' * 80)
     app.run(host='0.0.0.0', port=port, debug=False)
